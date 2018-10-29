@@ -1,26 +1,21 @@
 // Copyright 2016 Canonical Ltd.
 // Licensed under the LGPLv3, see LICENCE file for details.
 
-package monitoring_test
+package mgomonitor_test
 
 import (
-	"github.com/juju/testing"
-	jc "github.com/juju/testing/checkers"
+	"testing"
+
+	qt "github.com/frankban/quicktest"
+	"github.com/google/go-cmp/cmp"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
-	gc "gopkg.in/check.v1"
 	"gopkg.in/mgo.v2"
 
-	"github.com/cloud-green/monitoring"
+	"github.com/juju/mgomonitor"
 )
 
-var _ prometheus.Collector = (*monitoring.MgoStatsCollector)(nil)
-
-type mgoStatsSuite struct {
-	testing.MgoSuite
-}
-
-var _ = gc.Suite(&mgoStatsSuite{})
+var _ prometheus.Collector = (*mgomonitor.Collector)(nil)
 
 var (
 	clusterDesc      = prometheus.NewDesc("test_mgo_clusters", "Number of alive clusters.", nil, nil)
@@ -34,7 +29,9 @@ var (
 	socketRefsDesc   = prometheus.NewDesc("test_mgo_socket_references", "Number of references to sockets.", nil, nil)
 )
 
-func (s *mgoStatsSuite) TestDescribe(c *gc.C) {
+func TestDescribe(t *testing.T) {
+	c := qt.New(t)
+
 	expectDescriptions := []*prometheus.Desc{
 		clusterDesc,
 		masterConnDesc,
@@ -47,7 +44,7 @@ func (s *mgoStatsSuite) TestDescribe(c *gc.C) {
 		socketRefsDesc,
 	}
 
-	coll := monitoring.NewMgoStatsCollector("test")
+	coll := mgomonitor.NewCollector("test")
 	ch := make(chan *prometheus.Desc)
 	go func() {
 		defer close(ch)
@@ -58,11 +55,15 @@ func (s *mgoStatsSuite) TestDescribe(c *gc.C) {
 	for d := range ch {
 		obtainedDescriptions = append(obtainedDescriptions, d)
 	}
-	c.Assert(obtainedDescriptions, jc.DeepEquals, expectDescriptions)
+	c.Assert(obtainedDescriptions, deepEquals, expectDescriptions)
 }
 
-func (s *mgoStatsSuite) TestCollect(c *gc.C) {
-	coll := monitoring.NewMgoStatsCollector("test")
+var deepEquals = qt.CmpEquals(cmp.AllowUnexported(prometheus.Desc{}))
+
+func TestCollect(t *testing.T) {
+	c := qt.New(t)
+
+	coll := mgomonitor.NewCollector("test")
 	ch := make(chan prometheus.Metric)
 	go func() {
 		defer close(ch)
@@ -73,40 +74,40 @@ func (s *mgoStatsSuite) TestCollect(c *gc.C) {
 	for m := range ch {
 		obtainedMetrics = append(obtainedMetrics, m)
 	}
-	c.Assert(obtainedMetrics, gc.HasLen, 9)
+	c.Assert(obtainedMetrics, qt.HasLen, 9)
 
-	c.Assert(obtainedMetrics[0].Desc(), jc.DeepEquals, clusterDesc)
-	s.assertGauge(c, obtainedMetrics[0], float64(stats.Clusters))
+	c.Assert(obtainedMetrics[0].Desc(), deepEquals, clusterDesc)
+	assertGauge(c, obtainedMetrics[0], float64(stats.Clusters))
 
-	c.Assert(obtainedMetrics[1].Desc(), jc.DeepEquals, masterConnDesc)
-	s.assertGauge(c, obtainedMetrics[1], float64(stats.MasterConns))
+	c.Assert(obtainedMetrics[1].Desc(), deepEquals, masterConnDesc)
+	assertGauge(c, obtainedMetrics[1], float64(stats.MasterConns))
 
-	c.Assert(obtainedMetrics[2].Desc(), jc.DeepEquals, slaveConnDesc)
-	s.assertGauge(c, obtainedMetrics[2], float64(stats.SlaveConns))
+	c.Assert(obtainedMetrics[2].Desc(), deepEquals, slaveConnDesc)
+	assertGauge(c, obtainedMetrics[2], float64(stats.SlaveConns))
 
-	c.Assert(obtainedMetrics[3].Desc(), jc.DeepEquals, sentOpsDesc)
-	s.assertGauge(c, obtainedMetrics[3], float64(stats.SentOps))
+	c.Assert(obtainedMetrics[3].Desc(), deepEquals, sentOpsDesc)
+	assertGauge(c, obtainedMetrics[3], float64(stats.SentOps))
 
-	c.Assert(obtainedMetrics[4].Desc(), jc.DeepEquals, receivedOpsDesc)
-	s.assertGauge(c, obtainedMetrics[4], float64(stats.ReceivedOps))
+	c.Assert(obtainedMetrics[4].Desc(), deepEquals, receivedOpsDesc)
+	assertGauge(c, obtainedMetrics[4], float64(stats.ReceivedOps))
 
-	c.Assert(obtainedMetrics[5].Desc(), jc.DeepEquals, receivedDocsDesc)
-	s.assertGauge(c, obtainedMetrics[5], float64(stats.ReceivedDocs))
+	c.Assert(obtainedMetrics[5].Desc(), deepEquals, receivedDocsDesc)
+	assertGauge(c, obtainedMetrics[5], float64(stats.ReceivedDocs))
 
-	c.Assert(obtainedMetrics[6].Desc(), jc.DeepEquals, socketsAliveDesc)
-	s.assertGauge(c, obtainedMetrics[6], float64(stats.SocketsAlive))
+	c.Assert(obtainedMetrics[6].Desc(), deepEquals, socketsAliveDesc)
+	assertGauge(c, obtainedMetrics[6], float64(stats.SocketsAlive))
 
-	c.Assert(obtainedMetrics[7].Desc(), jc.DeepEquals, socketsInUseDesc)
-	s.assertGauge(c, obtainedMetrics[7], float64(stats.SocketsInUse))
+	c.Assert(obtainedMetrics[7].Desc(), deepEquals, socketsInUseDesc)
+	assertGauge(c, obtainedMetrics[7], float64(stats.SocketsInUse))
 
-	c.Assert(obtainedMetrics[8].Desc(), jc.DeepEquals, socketRefsDesc)
-	s.assertGauge(c, obtainedMetrics[8], float64(stats.SocketRefs))
+	c.Assert(obtainedMetrics[8].Desc(), deepEquals, socketRefsDesc)
+	assertGauge(c, obtainedMetrics[8], float64(stats.SocketRefs))
 }
 
-func (s *mgoStatsSuite) assertGauge(c *gc.C, m prometheus.Metric, value float64) {
+func assertGauge(c *qt.C, m prometheus.Metric, value float64) {
 	var metric dto.Metric
 	err := m.Write(&metric)
-	c.Assert(err, jc.ErrorIsNil)
-	c.Assert(metric.Gauge, gc.Not(gc.IsNil))
-	c.Assert(*metric.Gauge.Value, gc.Equals, value)
+	c.Assert(err, qt.Equals, nil)
+	c.Assert(metric.Gauge, qt.Not(qt.IsNil))
+	c.Assert(*metric.Gauge.Value, qt.Equals, value)
 }
