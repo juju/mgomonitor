@@ -1,16 +1,20 @@
 // Copyright 2016 Canonical Ltd.
 // Licensed under the LGPLv3, see LICENCE file for details.
 
-package monitoring
+// Package mgomonitor provides prometheus metrics for statistics collected
+// by the https://godoc.org/gopkg.in/mgo.v2 package,
+// including items such as the number of current connections and
+// number of operations sent and received.
+package mgomonitor
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/mgo.v2"
 )
 
-// MgoStatsCollector is a prometheus.Collector that reports the values
+// Collector is a prometheus.Collector that reports the values
 // provided by mgo.GetStats.
-type MgoStatsCollector struct {
+type Collector struct {
 	clusters    prometheus.Gauge
 	masterConns prometheus.Gauge
 	slaveConns  prometheus.Gauge
@@ -27,14 +31,14 @@ type MgoStatsCollector struct {
 }
 
 // Check implementation of prometheus.Collector interface.
-var _ prometheus.Collector = (*MgoStatsCollector)(nil)
+var _ prometheus.Collector = (*Collector)(nil)
 
-// NewMgoStatsCollector creates a MgoStatsCollector for the given
+// NewCollector creates a Collector for the given
 // namespace (which may be empty).
-func NewMgoStatsCollector(namespace string) *MgoStatsCollector {
+func NewCollector(namespace string) *Collector {
 	// Enable stats in the mgo driver.
 	mgo.SetStats(true)
-	return &MgoStatsCollector{
+	return &Collector{
 		clusters: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: "mgo",
@@ -93,7 +97,7 @@ func NewMgoStatsCollector(namespace string) *MgoStatsCollector {
 }
 
 // Describe implements prometheus.Collector.Describe.
-func (m *MgoStatsCollector) Describe(c chan<- *prometheus.Desc) {
+func (m *Collector) Describe(c chan<- *prometheus.Desc) {
 	c <- m.clusters.Desc()
 	c <- m.masterConns.Desc()
 	c <- m.slaveConns.Desc()
@@ -106,7 +110,7 @@ func (m *MgoStatsCollector) Describe(c chan<- *prometheus.Desc) {
 }
 
 // Collect implements prometheus.Collector.Collect.
-func (m *MgoStatsCollector) Collect(c chan<- prometheus.Metric) {
+func (m *Collector) Collect(c chan<- prometheus.Metric) {
 	stats := mgo.GetStats()
 	m.clusters.Set(float64(stats.Clusters))
 	c <- m.clusters
